@@ -9,7 +9,7 @@
 #import "WechatProxy.h"
 
 #import <UIKit/UIKit.h>
-#import "UIImage+ResizeMagick.h"
+#import "UIImage+DiplomatResize.h"
 
 static NSString * const kWechatErrorDomain = @"wechat_error_domain";
 NSString * const kDiplomatTypeWechat = @"diplomat_wechat";
@@ -30,8 +30,7 @@ NSString * const kWechatSceneTypeKey = @"wechat_scene_type_key";
 
 + (void)load
 {
-  [super load];
-  [[Diplomat sharedInstance] registerProxyObject:[self proxy] withName:kDiplomatTypeWechat];
+  [[Diplomat sharedInstance] registerProxyObject:[[WechatProxy alloc] init] withName:kDiplomatTypeWechat];
 }
 
 - (void)registerWithConfiguration:(NSDictionary * __nonnull)configuration
@@ -86,6 +85,22 @@ NSString * const kWechatSceneTypeKey = @"wechat_scene_type_key";
   [WXApi sendReq:wxReq];
 }
 
+- (void)pay:(id<DTWechatPaymentOrder> __nonnull)order completed:(DiplomatCompletedBlock __nullable)completedBlock
+{
+  self.block = completedBlock;
+
+  PayReq *payReq = [[PayReq alloc] init];
+  payReq.openID = [order openId];
+  payReq.partnerId = [order partnerId];
+  payReq.prepayId = [order prepayId];
+  payReq.nonceStr = [order nonceString];
+  payReq.timeStamp = [order timestamp];
+  payReq.package = [order package];
+  payReq.sign = [order sign];
+
+  [WXApi sendReq:payReq];
+}
+
 - (BOOL)isInstalled
 {
   return [WXApi isWXAppInstalled];
@@ -122,14 +137,7 @@ NSString * const kWechatSceneTypeKey = @"wechat_scene_type_key";
   {
     if (doneBlock)
     {
-      if (resp.errCode != WXSuccess)
-      {
-        doneBlock(nil, [NSError errorWithDomain:kWechatErrorDomain code:resp.errCode userInfo:@{NSLocalizedDescriptionKey: resp.errStr ?: @"分享失败"}]);
-      }
-      else
-      {
-        doneBlock(nil, nil);
-      }
+      doneBlock(nil, nil);
     }
   }
   else if([resp isKindOfClass:[SendAuthResp class]])
@@ -148,7 +156,13 @@ NSString * const kWechatSceneTypeKey = @"wechat_scene_type_key";
                                        userInfo:@{NSLocalizedDescriptionKey: @"微信授权失败"}]);
       }
     }
-
+  }
+  else if ([resp isKindOfClass:[PayResp class]])
+  {
+    if (doneBlock)
+    {
+        doneBlock(nil, nil);
+    }
   }
 }
 
@@ -290,12 +304,12 @@ static NSString *urlEncode(id object)
 @implementation DTMediaMessage (Wechat)
 - (WXMediaMessage *)wechatMessage
 {
-  WXMediaMessage *mesage = [WXMediaMessage message];
-  mesage.title = self.title;
-  mesage.description = self.desc;
-  mesage.thumbData = UIImageJPEGRepresentation([self.thumbnailableImage resizedImageByWidth:120], 0.75);
+  WXMediaMessage *message = [WXMediaMessage message];
+  message.title = self.title;
+  message.description = self.desc;
+  message.thumbData = UIImageJPEGRepresentation([self.thumbnailableImage resizedImage:CGSizeMake(120, 120) interpolationQuality:kCGInterpolationMedium], 0.65);
 
-  return mesage;
+  return message;
 }
 @end
 
@@ -304,7 +318,7 @@ static NSString *urlEncode(id object)
 - (WXMediaMessage *)wechatMessage
 {
   WXMediaMessage *message = [super wechatMessage];
-
+  message.thumbData = UIImageJPEGRepresentation([self.thumbnailableImage resizedImage:CGSizeMake(240, 240) interpolationQuality:kCGInterpolationMedium], 0.65);
   WXImageObject *imageObect = [WXImageObject object];
   imageObect.imageData = self.imageData;
   imageObect.imageUrl = self.imageUrl;
